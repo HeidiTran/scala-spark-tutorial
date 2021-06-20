@@ -1,5 +1,8 @@
 package com.sparkTutorial.pairRdd.aggregation.reducebykey.housePrice
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.{SparkConf, SparkContext}
+
 object AverageHousePriceProblem {
 
   def main(args: Array[String]) {
@@ -33,6 +36,27 @@ object AverageHousePriceProblem {
 
        3, 1 and 2 mean the number of bedrooms. 325000 means the average price of houses with 3 bedrooms is 325000.
      */
+    val conf = new SparkConf().setAppName("realEstate").setMaster("local[3]").set("spark.testing.memory", "536870912") // Use 3 threads with memory limit
+    val sc = new SparkContext(conf)
+    val lines = sc.textFile("in/RealEstate.csv")
+    val header = "MLS,Location,Price,Bedrooms,Bathrooms,Size,Price SQ Ft,Status"
+    val cleanedLines = lines.filter(_ != header)
+
+    val bedroomCntToHouseCntHousePricePair: RDD[(String, (Int, Double))] = cleanedLines.map(getBedroomCntAndHouseCntPricePair)
+
+    /* Add up the number of houses with the same # of bedroom
+     * Add up the price of all houses with the same # of bedroom
+     * Return an RDD of (# of bedroom, (1, price of the house))
+     */
+    val bedroomCntToHouseCntPriceSumPair: RDD[(String, (Int, Double))] = bedroomCntToHouseCntHousePricePair.reduceByKey((x, y) => (x._1 + y._1, x._2 + y._2))
+
+    val bedroomCntAvgHousePrice: RDD[(String, Double)] = bedroomCntToHouseCntPriceSumPair.mapValues(cntSumPair => cntSumPair._2 / cntSumPair._1)
+
+    for((bedroom, avg) <- bedroomCntAvgHousePrice.collect()) println(bedroom + " : " + avg)
   }
 
+  def getBedroomCntAndHouseCntPricePair(line: String): (String, (Int, Double)) = {
+    val fields = line.split(",")
+    (fields(3), (1, fields(2).toDouble)) // (# of bedroom, (1, price of the house))
+  }
 }
